@@ -338,7 +338,7 @@ export const ReservarClienteComponent = () => {
       });
     }
 
-  }, [idReserva, idMesa]); // Dependencia idMesa para el valor por defecto
+  }, [idReserva]);// Dependencia idMesa para el valor por defecto
 
   // ----------------------------------------------------------------------
   //RENDERIZADO

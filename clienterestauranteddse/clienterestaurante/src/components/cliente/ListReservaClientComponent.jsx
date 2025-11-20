@@ -7,6 +7,7 @@ import { getReservasByCliente, deleteReservacion } from '../../services/Reservar
 
 // Servicio de Cliente (Asegúrate de que 'getClienteByUserId' esté ahí)
 import { getClienteByUserId } from '../../services/ClienteService';
+import ConfirmDialog from '../../toast/ConfirmDialog';
 
 // Función auxiliar para obtener la fecha actual en formato YYYY-MM-DD
 const getTodayDate = () => {
@@ -23,6 +24,8 @@ export const ListReservaClientComponent = () => {
     const navegar = useNavigate();
     const location = useLocation();
     const today = getTodayDate();
+
+    const confirmDialogRef = useRef();
 
     // Estados de los datos del cliente
     const [idCliente, setIdCliente] = useState(null);
@@ -98,15 +101,23 @@ export const ListReservaClientComponent = () => {
         navegar(`/ventacliente/detalle/reserva/${idReserva}`);
     }
 
-    function cancelarReserva(idReserva) {
-        console.log(`Intentando cancelar (DELETE) reserva ID: ${idReserva}`);
+function cancelarReserva(idReserva) {
+    console.log(`Intentando cancelar (DELETE) reserva ID: ${idReserva}`);
 
-        if (window.confirm(`¿Está seguro de CANCELAR (Eliminar) la reservación ID #${idReserva}? Esta acción no se puede deshacer.`)) {
+    const message = `¿Está seguro de cancelar la reservación? Esta acción no se puede deshacer.`;
+
+    // Reemplazamos window.confirm por el modal
+    if (confirmDialogRef.current) {
+        // La función show recibe el mensaje y un callback que se ejecuta SI el usuario confirma (Aceptar)
+        confirmDialogRef.current.show(message, () => {
+            
+            // Lógica que se ejecuta SÓLO si el usuario presiona "Aceptar"
             // Llamada eliminación
             deleteReservacion(idReserva).then(() => {
 
                 if (toastRef.current) {
-                    toastRef.current.show(`Reservación ID ${idReserva} cancelada correctamente.`, 'danger');
+                    // Cambiamos el color a 'success' o 'info' ya que la acción del usuario fue exitosa (la cancelación)
+                    toastRef.current.show(`Reservación ID ${idReserva} cancelada correctamente.`, 'success'); 
                 }
 
                 // Recargar las reservaciones después de la eliminación
@@ -114,11 +125,15 @@ export const ListReservaClientComponent = () => {
 
             }).catch(error => {
                 console.error(`Error al eliminar la reservación ID: ${idReserva}`, error);
-                alert(`Error al cancelar la reservación. Consulta la consola para más detalles.`);
+                // Mostrar el error en el Toast en lugar de un `alert` nativo
+                if (toastRef.current) {
+                    toastRef.current.show(`Error al cancelar la reservación ID ${idReserva}. Intente de nuevo.`, 'danger'); 
+                }
             });
-        }
+        });
     }
 
+}
 
     //
     // Efecto 1: Cargar ID del Cliente Logueado
@@ -321,6 +336,7 @@ export const ListReservaClientComponent = () => {
             </div>
 
             <ToastNotification ref={toastRef} />
+            <ConfirmDialog ref={confirmDialogRef} />
 
         </div>
     );
