@@ -8,7 +8,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import ToastNotification from '../../toast/ToastComponent';
 
 // Asegúrate de que esta ruta sea correcta para tu proyecto
-const IMAGE_BASE_URL = 'http://34.31.77.252:3010/imagenes/productos/';
+const IMAGE_BASE_URL = '/imagenes/productos';
 
 
 export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiado
