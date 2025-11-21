@@ -8,7 +8,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import ToastNotification from '../../toast/ToastComponent';
 
 // Asegúrate de que esta ruta sea correcta para tu proyecto
-const IMAGE_BASE_URL = '/imagenes/productos';
+const IMAGE_BASE_URL = 'http://34.31.77.252:3010/imagenes/productos/';
 
 
 export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiado
@@ -50,14 +50,17 @@ export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiad
     // ------------------- LÓGICA DE CARGA INICIAL (MODIFICADA PARA RECUPERAR STATE) -------------------
 
     // Use effect para la Carga Inicial de Datos (Productos, Tipos y Venta)
-    useEffect(() => {
+useEffect(() => {
         const idVentaNum = parseInt(idVenta, 10);
         // 🆕 Recuperar el estado de navegación
         const carritoRecuperado = location.state?.carritoItems;
         const mensajeRecuperacion = location.state?.message;
 
         if (isNaN(idVentaNum) || idVentaNum <= 0) {
-            toastRef.current.show("ID de Venta no válido.", 'error', 5000);
+            //  MODIFICACIÓN 1: Verificación antes de llamar a show()
+            if (toastRef.current) {
+                toastRef.current.show("ID de Venta no válido.", 'error', 5000);
+            }
             setIsLoading(false);
             return;
         }
@@ -66,7 +69,8 @@ export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiad
             let loadedProducts; // Declarado dentro para el scope
 
             try {
-                // 1. Cargar Tipos de Productos
+                // ... (Carga de Tipos, Productos Activos y Datos de la Venta, sin cambios) ...
+
                 const tipoResponse = await listTipos();
                 const tiposData = tipoResponse.data;
                 const map = new Map();
@@ -74,13 +78,11 @@ export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiad
                 setTiposMap(map);
                 setTiposList(tiposData);
 
-                // 2. Cargar Productos Activos (Para la UI de selección y mapeo)
                 const productoResponse = await listActiveProductos();
                 loadedProducts = productoResponse.data;
                 setProductos(loadedProducts);
                 setFilteredProductos(loadedProducts);
 
-                // 3. Cargar Datos de la Venta (Siempre es necesario para la información de cabecera)
                 const ventaResponse = await getVenta(idVentaNum);
                 const ventaData = ventaResponse.data;
                 setVentaData(ventaData);
@@ -88,23 +90,28 @@ export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiad
                 let carritoInicial;
 
                 if (carritoRecuperado) {
-                    // 🆕 Caso 1: Carrito recuperado desde la navegación (al volver de MeseroCarritoCompra)
+                    // Caso 1: Carrito recuperado desde la navegación
                     carritoInicial = carritoRecuperado;
-                    if (mensajeRecuperacion) {
-                        toastRef.current.show(mensajeRecuperacion, 'info', 3000);
-                    } else {
-                        toastRef.current.show(`Venta ${idVentaNum} cargada y carrito recuperado.`, 'info', 3000);
+                    
+                    //  MODIFICACIÓN 2.1: Verificación antes de llamar a show()
+                    if (toastRef.current) {
+                        if (mensajeRecuperacion) {
+                            toastRef.current.show(mensajeRecuperacion, 'info', 3000);
+                        } else {
+                            toastRef.current.show(`Venta ${idVentaNum} cargada y carrito recuperado.`, 'info', 3000);
+                        }
                     }
                 } else {
-                    // 🔄 Caso 2: Mapear detalles de la venta a la estructura del carrito (Lógica original)
+                    //  Caso 2: Mapear detalles de la venta a la estructura del carrito
                     const detallesVentaPromesas = ventaData.detallesVenta.map(async (detalle) => {
+                        // ... (Lógica de mapeo de detalles, sin cambios) ...
                         const productoInfo = loadedProducts.find(p => p.id_producto === detalle.idProducto);
 
                         if (productoInfo) {
                             return {
                                 idProducto: detalle.idProducto,
                                 nombre: productoInfo.nombre,
-                                precioUnitario: productoInfo.precio, // Usamos el precio actual del producto
+                                precioUnitario: productoInfo.precio, 
                                 cantidad: detalle.cantidad,
                             };
                         } else {
@@ -121,22 +128,29 @@ export const MeseroProductoVenta = () => { // 🔄 Nombre del componente cambiad
                     });
 
                     carritoInicial = await Promise.all(detallesVentaPromesas);
-                    toastRef.current.show(`Venta ${idVentaNum} cargada para edición.`, 'info', 3000);
+
+                    //  MODIFICACIÓN 2.2: Verificación antes de llamar a show()
+                    if (toastRef.current) {
+                        toastRef.current.show(`Venta ${idVentaNum} cargada para edición.`, 'info', 3000);
+                    }
                 }
 
-                // 🔄 Asignación final del carrito
+                //  Asignación final del carrito
                 setCarrito(carritoInicial);
 
             } catch (error) {
                 console.error("Error al cargar datos iniciales:", error);
-                toastRef.current.show(`Error al cargar la venta ID ${idVentaNum}.`, 'error', 5000);
+                //  MODIFICACIÓN 3: Verificación dentro del bloque catch
+                if (toastRef.current) {
+                    toastRef.current.show(`Error al cargar la venta ID ${idVentaNum}.`, 'error', 5000);
+                }
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadData();
-    }, [idVenta, location]); // 🆕 location como dependencia para detectar la navegación de vuelta
+    }, [idVenta, location]);
 
     // ------------------- LÓGICA DE FILTRADO (Se mantiene igual) -------------------
 
