@@ -24,6 +24,7 @@ export const MeseroVentasComponent = () => {
     const toastRef = useRef(null);
     const location = useLocation();
     const confirmRef = useRef(null);
+    const TODAY_DATE = getTodayDateString(); // Constante para la fecha de hoy
 
     // Estados y constantes
     const [idEmpleado, setIdEmpleado] = useState(null); // ID del empleado logueado
@@ -31,8 +32,9 @@ export const MeseroVentasComponent = () => {
     const [ClientesMap, setClientesMap] = useState(new Map())
 
     // Estados para el filtro por fecha. La fecha inicial es SIEMPRE hoy.
-    const [filtroFecha, setFiltroFecha] = useState(getTodayDateString());
-    const [isFiltered, setIsFiltered] = useState(false); // Indica si se está mostrando un filtro (true) o el valor por defecto (false)
+    const [filtroFecha, setFiltroFecha] = useState(TODAY_DATE);
+    // isFiltered: Indica si se está mostrando un filtro (true: Ver Todas o una fecha diferente a Hoy)
+    const [isFiltered, setIsFiltered] = useState(false); 
 
     // Para navegar
     const navegar = useNavigate();
@@ -84,20 +86,22 @@ export const MeseroVentasComponent = () => {
 
             //2. Cargar las ventas iniciales (HOY) usando el idEmpleado ya cargado
             //Pasamos la fecha actual (filtroFecha inicial)
-            return obtenerVentas(getTodayDateString());
+            return obtenerVentas(TODAY_DATE);
         })
             .catch(error => {
                 console.error("Error al cargar datos de Venta o Cliente:", error);
                 setVentas([]);
                 toastRef.current.show("Error al cargar datos iniciales.", 'error', 5000);
             });
-    }, [idEmpleado])
+    }, [idEmpleado, TODAY_DATE])
 
     // Función auxiliar para obtener la lista de ventas atendidas
     function obtenerVentas(fechaFiltro) {
+        // fechaFiltro puede ser una fecha 'YYYY-MM-DD' o null para 'Ver Todas'
         if (idEmpleado === null) return;
 
         // Llama al nuevo endpoint, siempre incluyendo el idEmpleado
+        // Si fechaFiltro es null, el servicio lo omite correctamente
         return getVentasAtendidas(idEmpleado, fechaFiltro)
             .then(ventaResponse => {
                 let data = ventaResponse.data || [];
@@ -106,18 +110,21 @@ export const MeseroVentasComponent = () => {
                 const ventasFiltradas = data.filter(venta => venta.estado === 0);
                 setVentas(ventasFiltradas);
 
-                // Determinar si el resultado es un filtro activo (diferente a HOY)
-                const isCurrentFiltered = fechaFiltro !== getTodayDateString();
+                // Determinar si el resultado es un filtro activo (diferente a HOY o 'Ver Todas')
+                const isShowingToday = fechaFiltro === TODAY_DATE;
+                const isCurrentFiltered = !isShowingToday; 
                 setIsFiltered(isCurrentFiltered);
 
-                // Actualiza el estado del input de fecha para reflejar el filtro aplicado
-                setFiltroFecha(fechaFiltro);
+                // Actualiza el estado del input de fecha: si es null (Ver Todas), el input se limpia ('').
+                setFiltroFecha(fechaFiltro === null ? '' : fechaFiltro);
             })
             .catch(error => {
                 // El endpoint retorna 204 (NO_CONTENT) si no hay ventas
                 if (error.response && error.response.status === 204) {
                     setVentas([]);
-                    setIsFiltered(fechaFiltro !== getTodayDateString());
+                    const isShowingToday = fechaFiltro === TODAY_DATE;
+                    setIsFiltered(!isShowingToday);
+                    setFiltroFecha(fechaFiltro === null ? '' : fechaFiltro);
                 } else {
                     console.error("Error al obtener ventas:", error);
                     setVentas([]);
@@ -142,10 +149,15 @@ export const MeseroVentasComponent = () => {
 
     // Lógica de Reinicio (Vuelve a cargar las ventas de HOY) (sin cambios)
     function reiniciarBusqueda() {
-        const today = getTodayDateString();
-        setFiltroFecha(today); // Actualiza el input a HOY
+        setFiltroFecha(TODAY_DATE); // Actualiza el input a HOY
         // Recarga la lista de ventas para HOY
-        obtenerVentas(today);
+        obtenerVentas(TODAY_DATE);
+    }
+    
+    // LÓGICA DE VER TODAS LAS VENTAS
+    function manejarVerTodasVentas() {
+        // Al pasar null, la función obtenerVentas llama a la API sin el parámetro 'fecha'
+        obtenerVentas(null); 
     }
 
     // Handler para actualizar estado de la fecha (sin cambios)
@@ -180,18 +192,18 @@ export const MeseroVentasComponent = () => {
         navegar(`/mesero/editarventa/${idVenta}`);
     }
 
-    // 🚀 LÓGICA DE FINALIZAR VENTA (Actualiza estado a 1)
+    //LÓGICA DE FINALIZAR VENTA (Actualiza estado a 1)
     const manejarFinalizarVenta = (venta) => {
         const message = `¿Estás seguro de finalizar la venta? ya no se podrán agregar más productos`;
         
-        // ➡️ Reemplazamos window.confirm por el modal
+        //Reemplazamos window.confirm por el modal
         confirmRef.current.show(message, () => {
             // Lógica de Finalizar Venta: Este código SÓLO se ejecuta si se presiona "Aceptar"
             
             // El DTO debe incluir los campos que NO queremos que se borren (idCliente e idReserva)
             const ventaUpdateDto = {
-                idCliente: venta.idCliente, 
-                idReserva: venta.idReserva, 
+                idCliente: venta.idCliente, 
+                idReserva: venta.idReserva, 
                 estado: 1
             };
 
@@ -199,7 +211,7 @@ export const MeseroVentasComponent = () => {
                 .then(() => {
                     toastRef.current.show(`Venta ${venta.idventa} finalizada (Estado: 1).`, 'success', 3000);
                     // Recarga las ventas para que la lista muestre solo las activas (estado 0)
-                    obtenerVentas(filtroFecha); // Asumiendo que esta función existe
+                    obtenerVentas(filtroFecha === '' ? null : filtroFecha); // Recarga manteniendo el filtro actual (o 'Ver Todas' si estaba activo)
                 })
                 .catch(error => {
                     console.error("Error al finalizar la venta:", error);
@@ -212,13 +224,13 @@ export const MeseroVentasComponent = () => {
 
     // Diseño e implementación (La parte del return queda sin cambios, ya que los botones se definieron antes)
     return (
-        <div className="container-fluid p-4">
+        <div className="container-fluid p-3">
             <ConfirmDialog ref={confirmRef} />
             <ToastNotification ref={toastRef} />
-            <h2 className="text-center mb-4">Ventas a atender</h2>
+            <h2 className="text-center mb-2">Ventas a atender</h2>
 
             {/* ------------ INICIO DE LA SECCIÓN DE FILTRO ------------ */}
-            <div className="mb-4 w-50 mx-auto">
+            <div className="mb-2 w-50 mx-auto">
                 <div className="row g-3 align-items-end mb-3">
 
                     {/* Filtro por Fecha (col-md-12) */}
@@ -242,8 +254,8 @@ export const MeseroVentasComponent = () => {
                         <button
                             className='btn btn-primary btn-lg flex-grow-1 me-2 btn-busca-b'
                             onClick={manejarBusquedaPorFecha}
-                            // Deshabilitado si no hay fecha seleccionada o si el idEmpleado aún no carga
-                            disabled={!filtroFecha || idEmpleado === null}
+                            // Deshabilitado si el idEmpleado aún no carga
+                            disabled={idEmpleado === null} 
                         >
                             Buscar por Fecha
                         </button>
@@ -264,7 +276,19 @@ export const MeseroVentasComponent = () => {
                 Nueva Venta
             </button>
             <br />
-            <br />
+            {/* Se quita el <br> para poner el botón aquí */}
+
+            {/* ------------ BOTÓN VER TODAS (Arriba de la tabla, a la izquierda) ------------ */}
+            <div className="d-flex justify-content-start mb-1"> 
+                <button
+                    className='btn btn-primary me-2 btn-busca-b menorb'
+                    onClick={manejarVerTodasVentas}
+                    disabled={idEmpleado === null}
+                >
+                    Ver todas
+                </button>
+            </div>
+            {/* ---------------------------------------------------------------------------- */}
 
             <div className="table-responsive">
                 <table className="table table-striped table-hover table-bordered">
@@ -287,7 +311,13 @@ export const MeseroVentasComponent = () => {
                         ) : Ventas.length === 0 ? (
                             <tr>
                                 <td colSpan="5" className="text-center text-muted">
-                                    No se encontraron ventas activas ({isFiltered ? `para la fecha ${filtroFecha}` : 'hoy'}).
+                                    {/* Mensaje ajustado para reflejar si hay filtro o no */}
+                                    {isFiltered && filtroFecha === ''
+                                        ? "No se encontraron ventas activas." 
+                                        : isFiltered 
+                                            ? `No se encontraron ventas activas para la fecha ${filtroFecha}.` 
+                                            : "No se encontraron ventas activas hoy."
+                                    }
                                 </td>
                             </tr>
                         ) : (

@@ -2,9 +2,9 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 // 1. Servicios de Venta (Asegúrate de importar la nueva función)
-import { getVentasByClienteIdAndFecha } from '../../services/VentaService' 
+import { getVentasByClienteIdAndFecha } from '../../services/VentaService'
 // 2. Servicios de Cliente (Para obtener el ID de Cliente)
-import { getClienteByUserId } from '../../services/ClienteService' 
+import { getClienteByUserId } from '../../services/ClienteService'
 
 import ToastNotification from '../../toast/ToastComponent';
 
@@ -23,26 +23,28 @@ export const ListVentaHClienteComponent = () => {
     const toastRef = useRef(null);
     const location = useLocation();
     const navegar = useNavigate();
-    
+
     // Estados y constantes
     const [Ventas, setVentas] = useState([]);
     const [idCliente, setIdCliente] = useState(null); // ID del cliente logueado
-    
+
     // Estados para el filtro por fecha, inicializado en la fecha de hoy
-    const [filtroFecha, setFiltroFecha] = useState(getTodayDate()); 
+    const [filtroFecha, setFiltroFecha] = useState(getTodayDate());
+    // CAMBIO CLAVE: Cambiamos isFiltered para que también cubra la vista 'Todas'
+    // Si estamos mostrando 'Hoy', es false. Si mostramos otra fecha O TODAS, es true.
     const [isFiltered, setIsFiltered] = useState(false);
     const fechaHoy = getTodayDate(); // Fecha actual
 
     // Obtiene el ID de usuario del localStorage
     const getIdUsuarioFromLocalStorage = () => {
-        // Asume que el ID de usuario está guardado en localStorage bajo una clave, 
+        // Asume que el ID de usuario está guardado en localStorage bajo una clave,
         // por ejemplo, 'idUsuario' o dentro de un objeto de usuario
-        const usuarioString = localStorage.getItem('usuario'); 
+        const usuarioString = localStorage.getItem('usuario');
         if (usuarioString) {
-             // Esto es una asunción. Ajusta la lógica según cómo guardes el ID de usuario
+            // Esto es una asunción. Ajusta la lógica según cómo guardes el ID de usuario
             try {
                 const usuario = JSON.parse(usuarioString);
-                return usuario.idUsuario; 
+                return usuario.idUsuario;
             } catch (e) {
                 console.error("Error al parsear el usuario de localStorage:", e);
             }
@@ -55,7 +57,7 @@ export const ListVentaHClienteComponent = () => {
     };
 
 
-    //  Función principal para cargar el ID del Cliente y sus Ventas (inicial)
+    // Función principal para cargar el ID del Cliente y sus Ventas (inicial)
     useEffect(() => {
         const idUsuario = getIdUsuarioFromLocalStorage();
         if (idUsuario) {
@@ -64,8 +66,8 @@ export const ListVentaHClienteComponent = () => {
                     const clienteData = response.data;
                     const clienteId = clienteData.idcliente;
                     setIdCliente(clienteId);
-                    
-                    // Cargar las ventas del cliente para la fecha de hoy
+
+                    // Cargar las ventas del cliente para la fecha de hoy (comportamiento inicial)
                     obtenerVentas(clienteId, fechaHoy);
                 })
                 .catch(error => {
@@ -74,7 +76,7 @@ export const ListVentaHClienteComponent = () => {
         } else {
             console.error("ID de usuario no encontrado en localStorage.");
             // Opcional: Redirigir al login si no hay usuario
-            // navegar('/login'); 
+            // navegar('/login');
         }
 
     }, []); // Se ejecuta solo al montar el componente
@@ -91,20 +93,25 @@ export const ListVentaHClienteComponent = () => {
 
 
     // Función auxiliar para obtener la lista de ventas del cliente
+    // La fechaFiltro puede ser una fecha (YYYY-MM-DD) o una cadena vacía/null para ver todas.
     function obtenerVentas(clienteId, fechaFiltro) {
 
         if (!clienteId) return; //No hacer nada si no hay ID de cliente
 
-        //Usar la nueva función de servicio
-        return getVentasByClienteIdAndFecha(clienteId, fechaFiltro)
-            .then(ventaResponse => {
-               
-                const data = ventaResponse.data || []; 
-                setVentas(data); 
+        // Si fechaFiltro es null, undefined, o string vacío, el service envía la petición sin ?fecha=
+        const fecha = fechaFiltro || "";
 
-                //Lógica de filtro: 
-                //Si la fecha que se está mostrando NO es la fecha de hoy, se considera "filtrado".
-                setIsFiltered(fechaFiltro !== fechaHoy);
+        //Usar la función de servicio, que ahora es más robusta.
+        return getVentasByClienteIdAndFecha(clienteId, fecha)
+            .then(ventaResponse => {
+
+                const data = ventaResponse.data || [];
+                setVentas(data);
+
+                // Lógica de filtro:
+                // La lista está "filtrada" si NO estamos mostrando la fecha de hoy.
+                // Esto cubre tanto la búsqueda por otra fecha como la vista "Ver Todas" (fechaFiltro === "")
+                setIsFiltered(fecha !== fechaHoy);
 
             })
             .catch(error => {
@@ -119,12 +126,14 @@ export const ListVentaHClienteComponent = () => {
     }
 
 
-    // Función de manejo de la búsqueda/filtro
+    // Función de manejo de la búsqueda/filtro por fecha
     function manejarBusquedaPorFecha() {
         const fecha = filtroFecha.trim();
 
         if (fecha === "") {
-            // Si el campo de fecha está vacío, reiniciamos a la lista de HOY
+            // Si el campo de fecha está vacío, reiniciamos a la lista de HOY (Comportamiento deseado para el input)
+            // Aunque la función manejarVerTodas ya permite ver todo si la fecha es ""
+            // Aquí forzaremos el comportamiento de "Ver Hoy" si se intenta buscar con campo vacío.
             reiniciarBusqueda();
             return;
         }
@@ -133,7 +142,15 @@ export const ListVentaHClienteComponent = () => {
         obtenerVentas(idCliente, fecha);
     }
 
-    //  Lógica de Reinicio (siempre vuelve a la fecha de hoy)
+    // NUEVA FUNCIÓN: Ver todas las ventas
+    function manejarVerTodas() {
+        // 1. Quitar la fecha del input para indicar que no hay filtro
+        setFiltroFecha("");
+        // 2. Llamar a la función de obtención con fecha vacía
+        obtenerVentas(idCliente, "");
+    }
+
+    // Lógica de Reinicio (siempre vuelve a la fecha de hoy)
     function reiniciarBusqueda() {
         setFiltroFecha(fechaHoy); // Fija el input a hoy
         obtenerVentas(idCliente, fechaHoy); // Carga las ventas de hoy
@@ -149,16 +166,19 @@ export const ListVentaHClienteComponent = () => {
         navegar(`/ventacliente/detalle/venta/${id}`);
         console.log("Ver detalle de venta: ", id);
     }
-    
+
     // Diseño e implementación
     return (
         <div className="container-fluid p-4">
             <ToastNotification ref={toastRef} />
-            <h2 className="text-center mb-4">Mi Historial de Compras</h2>
+            <h2 className="text-center mb-4">Mi historial de compras</h2>
 
-            {/* ------------ INICIO DE LA SECCIÓN DE FILTRO ------------ */}
+
+
+
+            {/* ------------ INICIO DE LA SECCIÓN DE FILTRO DE FECHA INDIVIDUAL ------------ */}
             <div className="mb-4 w-50 mx-auto">
-                <div className="row g-3 align-items-end mb-3">
+                <div className="row g-3 align-items-end mb-1">
 
                     {/* Filtro por Fecha (col-md-12) */}
                     <div className="col-md-12 text-start">
@@ -187,24 +207,34 @@ export const ListVentaHClienteComponent = () => {
                             Buscar por Fecha
                         </button>
                         <button
-                            // Mostrar solo si no estamos viendo la fecha de hoy
+                            // Mostrar solo si la lista actual NO es la de la fecha de hoy
                             className={`btn btn-secondary btn-lg btn-reinicia-b ${isFiltered ? '' : 'd-none'}`}
                             onClick={reiniciarBusqueda}
                         >
-                            Ver Hoy ({fechaHoy})
+                            Reiniciar
                         </button>
                     </div>
                 </div>
             </div>
-            {/* ------------ FIN DE LA SECCIÓN DE FILTRO ------------ */}
+            {/* ------------ FIN DE LA SECCIÓN DE FILTRO DE FECHA INDIVIDUAL ------------ */}
 
-            {/* No hay botón de "Nueva Venta" para el cliente en esta vista */}
-            
+            {/* NUEVA FILA PARA EL BOTÓN "VER TODAS" */}
+            <div className="d-flex justify-content-between align-items-center mb-1">
+                {/* Botón "Ver todas" */}
+                <button
+                    className='btn btn-primary me-2 btn-busca-b menorb'
+                    onClick={manejarVerTodas}
+                    disabled={!idCliente}
+                >
+                    Ver todas
+                </button>
+            </div>
+            {/* -------------------------------------------------------- */}
+
             <table className="table table-striped table-hover table-bordered">
 
                 <thead className='tableHeaderStyle'>
                     <tr>
-                        {/* Columnas Simplificadas */}
                         <th>ID Venta</th>
                         <th>Fecha</th>
                         <th>Total</th>
@@ -216,7 +246,7 @@ export const ListVentaHClienteComponent = () => {
                     {Ventas.length === 0 ? (
                         <tr>
                             <td colSpan="4" className="text-center text-muted">
-                                No se encontraron ventas para la fecha **{filtroFecha}**.
+                                No se encontraron ventas para la fecha {filtroFecha === "" ? 'cualquier fecha' : filtroFecha}.
                             </td>
                         </tr>
                     ) : (
@@ -227,8 +257,7 @@ export const ListVentaHClienteComponent = () => {
                                 <td>${venta.totalventa ? venta.totalventa.toFixed(2) : '0.00'}</td>
 
                                 <td>
-                                    <button className='btn btn-primary' onClick={() => verDetalleVenta(venta.idventa)}>Ver Detalle</button>
-                                    {/* Botón de Eliminar removido */}
+                                    <button className='btn btn-info btn-sm' onClick={() => verDetalleVenta(venta.idventa)}>Ver Detalle</button>
                                 </td>
                             </tr>
                         )

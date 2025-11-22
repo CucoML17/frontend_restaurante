@@ -33,26 +33,28 @@ export const ListReservaClientComponent = () => {
 
     // Estados de las reservas
     const [reservas, setReservas] = useState([]);
-    const [filtroFecha, setFiltroFecha] = useState(today); 
-    const [isFiltered, setIsFiltered] = useState(false); // true si el filtroFecha no es la fecha de hoy
+    const [filtroFecha, setFiltroFecha] = useState(today);  
+    // isFiltered: true si se está mostrando algo diferente al filtro por defecto (hoy)
+    const [isFiltered, setIsFiltered] = useState(false); 
 
     // Para el toast
     const toastRef = useRef();
 
     //Logica de carga de datos---------------------------------------------------------------------
 
-    //Carga las reservas para el cliente logueado y la fecha especificada.
+    //Carga las reservas para el cliente logueado y la fecha especificada (o todas si fechaFiltro es null).
     const getAllReservaciones = useCallback((clienteId, fechaFiltro = null) => {
         
         if (!clienteId) return; //No hacer nada si no hay ID de cliente
 
         getReservasByCliente(clienteId, fechaFiltro).then((response) => {
             
-            //La API retorna 204 No Content si está vacío o 200 con la lista
-            setReservas(response.data || []); 
+            // La API retorna 204 No Content si está vacío o 200 con la lista
+            setReservas(response.data || []);  
             
-            //Determinar si hay un filtro aplicado diferente al default (hoy)
-            setIsFiltered(fechaFiltro !== today); 
+            // Determinar si hay un filtro aplicado diferente al default (hoy)
+            // Se considera filtrado si fechaFiltro es una fecha DIFERENTE a hoy, o si es NULL (Ver Todas)
+            setIsFiltered(fechaFiltro === null || fechaFiltro !== today); 
 
         }).catch(error => {
             console.error("Error al cargar las reservaciones del cliente:", error);
@@ -63,14 +65,14 @@ export const ListReservaClientComponent = () => {
                 }
             }
             setReservas([]);
-            setIsFiltered(fechaFiltro !== today); 
+            setIsFiltered(fechaFiltro === null || fechaFiltro !== today); 
         });
     }, [today]);
 
 
     //Lógica de filtro-------------------------------------------------------------------
 
-    // Maneja la búsqueda al hacer clic en el botón
+    // Maneja la búsqueda al hacer clic en el botón "Buscar por Fecha"
     function manejarBusquedaPorFecha() {
         if (idCliente && filtroFecha) {
             getAllReservaciones(idCliente, filtroFecha);
@@ -82,6 +84,14 @@ export const ListReservaClientComponent = () => {
         setFiltroFecha(today); // Resetear la fecha al día de hoy
         getAllReservaciones(idCliente, today);
     }
+    
+    // Muestra todas las reservas (sin filtro de fecha)
+    function manejarVerTodasReservas() {
+        setFiltroFecha(''); // Limpiar la visualización del input de fecha
+        // Llamar con 'null' para que el servicio no incluya el parámetro `fecha` en la URL.
+        getAllReservaciones(idCliente, null); 
+    }
+
 
     // Handler para el cambio de la fecha en el input
     const handleFechaChange = (e) => {
@@ -117,7 +127,7 @@ function cancelarReserva(idReserva) {
 
                 if (toastRef.current) {
                     // Cambiamos el color a 'success' o 'info' ya que la acción del usuario fue exitosa (la cancelación)
-                    toastRef.current.show(`Reservación ID ${idReserva} cancelada correctamente.`, 'success'); 
+                    toastRef.current.show(`Reservación ID ${idReserva} cancelada correctamente.`, 'success');  
                 }
 
                 // Recargar las reservaciones después de la eliminación
@@ -127,7 +137,7 @@ function cancelarReserva(idReserva) {
                 console.error(`Error al eliminar la reservación ID: ${idReserva}`, error);
                 // Mostrar el error en el Toast en lugar de un `alert` nativo
                 if (toastRef.current) {
-                    toastRef.current.show(`Error al cancelar la reservación ID ${idReserva}. Intente de nuevo.`, 'danger'); 
+                    toastRef.current.show(`Error al cancelar la reservación ID ${idReserva}. Intente de nuevo.`, 'danger');  
                 }
             });
         });
@@ -172,9 +182,9 @@ function cancelarReserva(idReserva) {
     useEffect(() => {
         if (idCliente) {
             // Cargar con el filtro de fecha actual (que por defecto es 'today')
-            getAllReservaciones(idCliente, filtroFecha); 
+            getAllReservaciones(idCliente, filtroFecha);  
         }
-    }, [idCliente, getAllReservaciones]); 
+    }, [idCliente, getAllReservaciones]);  
 
 
     // Efecto 3: Manejo del Toast
@@ -208,6 +218,7 @@ function cancelarReserva(idReserva) {
                     <p className="text-center text-danger fw-bold">Error: ID de cliente no disponible.</p>
                 ) : (
                     <>
+                        {/* 1. FILTRO DE FECHA Y BOTÓN DE BUSCAR/REINICIAR - CENTRADO */}
                         <div className="row g-3 align-items-end mb-3">
                             <div className="col-md-12 text-start">
                                 <label htmlFor="fechaFilter" className="form-label text-start">
@@ -224,20 +235,21 @@ function cancelarReserva(idReserva) {
                             </div>
                         </div>
 
-                        <div className="row g-3 align-items-end justify-content-center">
+                        <div className="row g-3 align-items-end justify-content-center mb-5"> {/* Mayor margen inferior */}
                             <div className="col-md-6 d-flex">
                                 <button
                                     className='btn btn-primary btn-lg flex-grow-1 me-2 btn-busca-b'
-                                    onClick={manejarBusquedaPorFecha} 
+                                    onClick={manejarBusquedaPorFecha}  
                                     disabled={!filtroFecha}
                                 >
                                     Buscar por Fecha
                                 </button>
                                 <button
-                                    className={`btn btn-secondary btn-lg btn-reinicia-b ${isFiltered ? '' : 'd-none'}`}
-                                    onClick={reiniciarBusqueda} 
+                                    // Se muestra si 'isFiltered' es true, es decir, no estamos en el filtro por defecto (hoy)
+                                    className={`btn btn-secondary btn-lg btn-reinicia-b ${isFiltered ? '' : 'd-none'}`} 
+                                    onClick={reiniciarBusqueda}  
                                 >
-                                    Reiniciar (Hoy)
+                                    Reiniciar
                                 </button>
                             </div>
                         </div>
@@ -245,7 +257,20 @@ function cancelarReserva(idReserva) {
                 )}
             </div>
             {/* ------------ FIN DE LA SECCIÓN DE FILTRO ------------ */}
-
+            
+            {/* ------------ BOTÓN VER TODAS (Arriba de la tabla, a la izquierda) ------------ */}
+            {idCliente && (
+                <div className="d-flex justify-content-start mb-3"> 
+                    <button
+                        className='btn btn-primary me-2 btn-busca-b menorb'
+                        onClick={manejarVerTodasReservas} 
+                        disabled={!idCliente}
+                    >
+                        Ver todas
+                    </button>
+                </div>
+            )}
+            {/* --------------------------------------------------------------------------------- */}
 
             <div className="table-responsive">
                 <table className="table table-striped table-hover table-bordered">
@@ -267,14 +292,22 @@ function cancelarReserva(idReserva) {
                             </tr>
                         ) : reservas.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="text-center text-muted">No tienes reservaciones que coincidan con la fecha seleccionada.</td>
+                                <td colSpan="6" className="text-center text-muted">
+                                    {/* Mensaje ajustado para reflejar si hay filtro o no */}
+                                    {isFiltered && filtroFecha === ''
+                                        ? "No tienes reservaciones registradas." // Si se usó "Ver Todas" y no hay nada
+                                        : isFiltered 
+                                            ? `No tienes reservaciones para la fecha ${filtroFecha}.` 
+                                            : "No tienes reservaciones para el día de hoy."
+                                    }
+                                </td>
                             </tr>
                         ) : (
                             reservas.map(reserva => {
 
                                 const isPending = reserva.estatus === 0;
                                 const isCompleted = reserva.estatus === 1;
-                                const isProcessing = reserva.estatus === 2; // Aunque el cliente no debería ver esto, lo manejamos.
+                                const isProcessing = reserva.estatus === 2; 
 
                                 let currentEstatusDisplay = 'Desconocido';
                                 let currentEstatusColorClass = 'text-muted';

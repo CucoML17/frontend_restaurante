@@ -352,7 +352,7 @@ export const ListEmpleadoComponent = () => {
               <option value="Todos">Todos los Puestos</option>
               {PuestosList.map(puesto => (
                 // 🚩 Opcional: Si targetFlag es 1 o 2, solo mostramos el Puesto ID 3 (Vendedor)
-                ((targetFlag === 1 || targetFlag === 2) && puesto.idPuesto !== 3) ? null :
+                ((targetFlag === 1 || targetFlag === 2) && puesto.idPuesto !== 4) ? null :
                   <option key={puesto.idPuesto} value={puesto.idPuesto.toString()}>
                     {puesto.nombrePuesto}
                   </option>
