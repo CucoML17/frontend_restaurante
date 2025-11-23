@@ -108,32 +108,67 @@ export const ListClienteComponent = () => {
     }
 
     // Renombramos para que siempre use la función de servicio que obtiene el listado
-    function getAllCliente() {
-        listClientes().then((response) => {
-            const clientesData = response.data;
-            setClientes(clientesData);
+// Renombramos para que siempre use la función de servicio que obtiene el listado
+function getAllCliente() {
+    listClientes().then((response) => {
+        let clientesData = response.data; // Cambiamos a 'let' para poder modificarla
 
-            // NUEVA LÓGICA DE CARGA DE ESTATUS DE USUARIO
-            const userPromises = clientesData
-                .filter(c => c.idUsuario && c.idUsuario > 0)
-                .map(c => getUsuarioById(c.idUsuario));
+        // 1. CARGA DE ESTATUS DE USUARIO Y FILTRADO (SI APLICA)
+        const userPromises = clientesData
+            .filter(c => c.idUsuario && c.idUsuario > 0)
+            .map(c => getUsuarioById(c.idUsuario));
 
-            Promise.allSettled(userPromises).then(results => {
-                const estatusMap = new Map();
+        Promise.allSettled(userPromises).then(results => {
+            const estatusMap = new Map();
+            let clientesFinal = clientesData; // Lista por defecto
+
+            if (targetFlag === 1 || targetFlag === 2 || targetFlag === 3) {
+                // Modo SELECCIÓN: Aplicar filtro estricto por estatus activo
+                const activosIds = new Set();
+                
+                results.forEach(result => {
+                    if (result.status === "fulfilled" && result.value.data) {
+                        const usuario = result.value.data;
+                        estatusMap.set(usuario.id, usuario.estatus);
+                        
+                        // Si el usuario está activo (estatus === 1), guardamos su ID
+                        if (usuario.estatus === 1) {
+                            activosIds.add(usuario.id);
+                        }
+                    }
+                });
+                
+                // Filtramos la lista original: solo incluimos si NO tiene usuario O si su idUsuario está en la lista de activos.
+                // Asumimos que si no tiene idUsuario, puede ser seleccionado (esto puede ajustarse según la regla de negocio).
+                // Pero, si tiene idUsuario > 0, DEBE estar en la lista de activos.
+                clientesFinal = clientesData.filter(cliente => {
+                    return !cliente.idUsuario || cliente.idUsuario === 0 || activosIds.has(cliente.idUsuario);
+                });
+                
+            } else {
+                // Modo ADMINISTRACIÓN (targetFlag === 0): Solo cargamos el mapa de estatus para los botones
                 results.forEach(result => {
                     if (result.status === "fulfilled" && result.value.data) {
                         const usuario = result.value.data;
                         estatusMap.set(usuario.id, usuario.estatus);
                     }
                 });
-                setUserEstatusMap(estatusMap);
-            }).catch(error => console.error("Error al cargar estatus de usuarios:", error));
-            // 🟢 FIN DE LA NUEVA LÓGICA
+            }
+
+            // 2. ACTUALIZAR ESTADOS
+            setClientes(clientesFinal);
+            setUserEstatusMap(estatusMap);
 
         }).catch(error => {
-            console.error("Error al obtener la lista de clientes:", error);
-        })
-    }
+            console.error("Error al cargar estatus de usuarios:", error);
+            // Manejo de error si falla la carga de estatus: mostrar lista sin filtrar/vacía.
+            setClientes([]);
+        });
+
+    }).catch(error => {
+        console.error("Error al obtener la lista de clientes:", error);
+    })
+}
 
     // Función que se dispara al cambiar el input de búsqueda
     const handleSearchTermChange = (e) => {
@@ -141,44 +176,68 @@ export const ListClienteComponent = () => {
     };
 
     //Filtrado: AHORA LLAMA AL BACKEND
-    function handleSearch() {
-        const nombreFiltro = searchTerm.trim();
+function handleSearch() {
+    const nombreFiltro = searchTerm.trim();
 
-        if (nombreFiltro) {
-            // Caso 1: Hay un término de búsqueda. Ejecuta el filtro.
-            setIsFiltered(true); // La tabla es el resultado de un filtro
+    if (nombreFiltro) {
+        setIsFiltered(true);
 
-            buscaClientesByName(nombreFiltro).then((response) => {
-                const clientesData = response.data;
-                setClientes(clientesData);
+        buscaClientesByName(nombreFiltro).then((response) => {
+            let clientesData = response.data;
 
-                //RECARGAR ESTATUS DE USUARIOS después del filtro
-                const userPromises = clientesData
-                    .filter(c => c.idUsuario && c.idUsuario > 0)
-                    .map(c => getUsuarioById(c.idUsuario));
+            // 1. CARGA DE ESTATUS DE USUARIO PARA LOS RESULTADOS DE BÚSQUEDA
+            const userPromises = clientesData
+                .filter(c => c.idUsuario && c.idUsuario > 0)
+                .map(c => getUsuarioById(c.idUsuario));
 
-                Promise.allSettled(userPromises).then(results => {
-                    const estatusMap = new Map();
+            Promise.allSettled(userPromises).then(results => {
+                const estatusMap = new Map();
+                let clientesFinal = clientesData;
+
+                if (targetFlag === 1 || targetFlag === 2 || targetFlag === 3) {
+                    // Modo SELECCIÓN: Aplicar filtro estricto por estatus activo
+                    const activosIds = new Set();
+                    
+                    results.forEach(result => {
+                        if (result.status === "fulfilled" && result.value.data) {
+                            const usuario = result.value.data;
+                            estatusMap.set(usuario.id, usuario.estatus);
+                            
+                            if (usuario.estatus === 1) {
+                                activosIds.add(usuario.id);
+                            }
+                        }
+                    });
+                    
+                    // Filtrar: solo incluir si NO tiene usuario o si está activo
+                    clientesFinal = clientesData.filter(cliente => {
+                        return !cliente.idUsuario || cliente.idUsuario === 0 || activosIds.has(cliente.idUsuario);
+                    });
+                } else {
+                    // Modo ADMINISTRACIÓN (targetFlag === 0): Solo cargar el mapa de estatus
                     results.forEach(result => {
                         if (result.status === "fulfilled" && result.value.data) {
                             const usuario = result.value.data;
                             estatusMap.set(usuario.id, usuario.estatus);
                         }
                     });
-                    setUserEstatusMap(estatusMap);
-                });
-                // FIN RECARGAR ESTATUS
+                }
 
-            }).catch(error => {
-                console.error("Error al buscar clientes por nombre:", error);
-                setClientes([]); // En caso de error, limpia o muestra un error.
+                // 2. ACTUALIZAR ESTADOS
+                setClientes(clientesFinal);
+                setUserEstatusMap(estatusMap);
             });
-        } else {
-            //Caso 2: Campo vacío. Vuelve a cargar la lista completa.
-            setIsFiltered(false); //No hay filtro activo
-            getAllCliente();
-        }
+
+        }).catch(error => {
+            console.error("Error al buscar clientes por nombre:", error);
+            setClientes([]);
+        });
+    } else {
+        //Caso 2: Campo vacío. Vuelve a cargar la lista completa (que ya tiene la lógica de filtrado).
+        setIsFiltered(false);
+        getAllCliente();
     }
+}
 
     //Ejecutar búsqueda al presionar "Enter" en el input
     const handleKeyPress = (e) => {

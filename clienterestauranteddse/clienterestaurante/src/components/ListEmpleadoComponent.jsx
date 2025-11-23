@@ -15,8 +15,8 @@ export const ListEmpleadoComponent = () => {
 
   //El toast
   const toastRef = useRef(null);
-    // 💡 1. Crear la referencia para el ConfirmDialog
-    const confirmRef = useRef(null);
+  // 💡 1. Crear la referencia para el ConfirmDialog
+  const confirmRef = useRef(null);
 
   //Parametros pasados por la URL
   const { flag, idreserva, idcliente } = useParams();
@@ -73,35 +73,35 @@ export const ListEmpleadoComponent = () => {
     if (idUsuario === 0) return; // No se puede alternar si no hay usuario
 
     const accion = currentEstatus === 1 ? 'desactivar' : 'activar';
-        const mensaje = `¿Está seguro de ${accion} a este empleado?`;
-        
-        confirmRef.current.show(
-            mensaje,
-            () => {
-                // Lógica de toggleUserEstatus (lo que estaba en el `then` del window.confirm)
-                toggleUserEstatus(idUsuario).then(response => {
-                    const nuevoEstatus = response.data.estatus;
-                    const toastMsg = `Usuario ${nuevoEstatus === 1 ? 'activado' : 'desactivado'} correctamente.`;
+    const mensaje = `¿Está seguro de ${accion} a este empleado?`;
 
-                    if (toastRef.current) {
-                        toastRef.current.show(toastMsg, nuevoEstatus === 1 ? 'success' : 'danger', 3000);
-                    }
+    confirmRef.current.show(
+      mensaje,
+      () => {
+        // Lógica de toggleUserEstatus (lo que estaba en el `then` del window.confirm)
+        toggleUserEstatus(idUsuario).then(response => {
+          const nuevoEstatus = response.data.estatus;
+          const toastMsg = `Usuario ${nuevoEstatus === 1 ? 'activado' : 'desactivado'} correctamente.`;
 
-                    // Actualizar el mapa local después de la operación exitosa
-                    setUserEstatusMap(prevMap => {
-                        const newMap = new Map(prevMap);
-                        newMap.set(idUsuario, nuevoEstatus);
-                        return newMap;
-                    });
+          if (toastRef.current) {
+            toastRef.current.show(toastMsg, nuevoEstatus === 1 ? 'success' : 'danger', 3000);
+          }
 
-                }).catch(error => {
-                    console.error("Error al alternar estatus del usuario:", error);
-                    if (toastRef.current) {
-                        toastRef.current.show("Error al cambiar el estatus del usuario.", 'error', 5000);
-                    }
-                });
-            }
-        );
+          // Actualizar el mapa local después de la operación exitosa
+          setUserEstatusMap(prevMap => {
+            const newMap = new Map(prevMap);
+            newMap.set(idUsuario, nuevoEstatus);
+            return newMap;
+          });
+
+        }).catch(error => {
+          console.error("Error al alternar estatus del usuario:", error);
+          if (toastRef.current) {
+            toastRef.current.show("Error al cambiar el estatus del usuario.", 'error', 5000);
+          }
+        });
+      }
+    );
   }
 
   // La función para obtener todos los empleados
@@ -121,32 +121,79 @@ export const ListEmpleadoComponent = () => {
     }).then(empleadoResponse => {
       let empleadosData = empleadoResponse.data;
 
-      // Si el flag es 1 o 2 (Reserva/Venta), filtramos solo a VENDEDORES (idPuesto === 4)
+      // **PASO 2.1: Filtrado Inicial por Meseros (si aplica)**
       if (targetFlag === 1 || targetFlag === 2) {
         empleadosData = empleadosData.filter(empleado => empleado.idPuesto === 4);
       }
 
-      setEmpleadosOriginales(empleadosData);
-      setEmpleadosFiltrados(empleadosData);
-      setIsFiltered(false); // Al cargar, no está filtrado
+      // ----------------------------------------------------
+      // **INICIO DE LA NUEVA LÓGICA DE FILTRADO POR ESTATUS DE USUARIO**
+      // ----------------------------------------------------
 
-      // NUEVA LÓGICA DE CARGA DE ESTATUS DE USUARIO (AQUÍ ES DONDE VA)
-      const userPromises = empleadosData
-        .filter(e => e.idUsuario && e.idUsuario > 0)
-        .map(e => getUsuarioById(e.idUsuario));
+      // Solo aplicamos el filtro de estatus si estamos en modo de selección (targetFlag 1 o 2)
+      if (targetFlag === 1 || targetFlag === 2) {
 
-      // No esperamos aquí, la función sigue y el map se actualizará.
-      Promise.allSettled(userPromises).then(results => {
-        const estatusMap = new Map();
-        results.forEach(result => {
-          if (result.status === "fulfilled" && result.value.data) {
-            const usuario = result.value.data;
-            estatusMap.set(usuario.id, usuario.estatus);
-          }
+        // Filtramos los empleados que tienen un idUsuario válido para buscar su estatus.
+        const empleadosConUsuario = empleadosData.filter(e => e.idUsuario && e.idUsuario > 0);
+
+        // Creamos un arreglo de promesas para obtener el usuario de cada empleado.
+        const userPromises = empleadosConUsuario.map(e => getUsuarioById(e.idUsuario));
+
+        // Esperamos a que todas las promesas se resuelvan (settled).
+        Promise.allSettled(userPromises).then(results => {
+          const estatusMap = new Map();
+          const empleadosFiltradosPorEstatus = [];
+
+          results.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value.data) {
+              const usuario = result.value.data;
+              estatusMap.set(usuario.id, usuario.estatus);
+
+              // **FILTRO CLAVE:** Solo incluimos al empleado si su estatus es 1 (Activo)
+              if (usuario.estatus === 1) {
+                empleadosFiltradosPorEstatus.push(empleadosConUsuario[index]);
+              }
+            }
+          });
+
+          // Los empleadosData ahora solo contienen Meseros y están filtrados por estatus = 1
+          setEmpleadosOriginales(empleadosFiltradosPorEstatus);
+          setEmpleadosFiltrados(empleadosFiltradosPorEstatus);
+          setIsFiltered(false);
+          setUserEstatusMap(estatusMap); // Actualizar el mapa de estatus para otros usos
+
+        }).catch(error => {
+          console.error("Error al cargar y filtrar por estatus de usuarios:", error);
+          setEmpleadosOriginales([]);
+          setEmpleadosFiltrados([]);
         });
-        setUserEstatusMap(estatusMap);
-      }).catch(error => console.error("Error al cargar estatus de usuarios:", error));
-      // FIN DE LA NUEVA LÓGICA
+
+      } else {
+        // **LÓGICA EXISTENTE (MODO ADMINISTRACIÓN - targetFlag 0)**
+        // No aplicamos el filtro de estatus para el modo administración.
+        setEmpleadosOriginales(empleadosData);
+        setEmpleadosFiltrados(empleadosData);
+        setIsFiltered(false);
+
+        // Carga asíncrona de estatus para botones de Activar/Desactivar
+        const userPromises = empleadosData
+          .filter(e => e.idUsuario && e.idUsuario > 0)
+          .map(e => getUsuarioById(e.idUsuario));
+
+        Promise.allSettled(userPromises).then(results => {
+          const estatusMap = new Map();
+          results.forEach(result => {
+            if (result.status === "fulfilled" && result.value.data) {
+              const usuario = result.value.data;
+              estatusMap.set(usuario.id, usuario.estatus);
+            }
+          });
+          setUserEstatusMap(estatusMap);
+        }).catch(error => console.error("Error al cargar estatus de usuarios (Admin):", error));
+      }
+      // ----------------------------------------------------
+      // **FIN DE LA NUEVA LÓGICA DE FILTRADO POR ESTATUS DE USUARIO**
+      // ----------------------------------------------------
 
     }).catch(error => {
       console.error("Error al cargar datos:", error);
@@ -168,22 +215,46 @@ export const ListEmpleadoComponent = () => {
     // Determinar si *algún* filtro está activo
     const isSearchActive = nombre || idPuesto > 0;
 
-    if (!isSearchActive) {
-      // Si no hay filtros activos, reiniciamos la vista (muestra todos los originales)
+    if (!isSearchActive && (targetFlag !== 1 && targetFlag !== 2)) {
+      // Si no hay filtros y no estamos en modo de selección, reiniciamos
       reiniciarFiltros();
       return;
     }
 
     // Llamar al servicio de filtro con los parámetros
-    buscarEmpleados(nombre, idPuesto) //
+    buscarEmpleados(nombre, idPuesto)
       .then(response => {
         let resultados = response.data;
 
+        // Filtro por Meseros (idPuesto = 4)
         if (targetFlag === 1 || targetFlag === 2) {
+          // Filtramos primero por Mesero, si el targetFlag lo requiere.
           resultados = resultados.filter(empleado => empleado.idPuesto === 4);
-        }
 
-        setEmpleadosFiltrados(resultados);
+          // 🚩 Nuevo: Filtro por Estatus de Usuario (Solo si estamos en modo de selección)
+          const empleadosConUsuario = resultados.filter(e => e.idUsuario && e.idUsuario > 0);
+          const userPromises = empleadosConUsuario.map(e => getUsuarioById(e.idUsuario));
+
+          // Esperamos las promesas para filtrar por estatus
+          return Promise.allSettled(userPromises).then(results => {
+            const empleadosFiltradosPorEstatus = [];
+            results.forEach((result, index) => {
+              if (result.status === "fulfilled" && result.value.data && result.value.data.estatus === 1) {
+                empleadosFiltradosPorEstatus.push(empleadosConUsuario[index]);
+              }
+            });
+            // Devolvemos el array ya filtrado por estatus 1
+            return empleadosFiltradosPorEstatus;
+          });
+
+        } else {
+          // Si no es modo de selección, simplemente retornamos los resultados.
+          return resultados;
+        }
+      })
+      .then(finalResultados => {
+        // Este .then recibe el resultado final, ya sea filtrado por estatus o el resultado sin filtro.
+        setEmpleadosFiltrados(finalResultados);
         setIsFiltered(true); // Filtro aplicado
       })
       .catch(error => {
@@ -230,22 +301,22 @@ export const ListEmpleadoComponent = () => {
 
   // 💡 3. Eliminación con ConfirmDialog
   function eliminarEmpleado(empleado) {
-        confirmRef.current.show(
-            `¿Está seguro de eliminar al empleado **${empleado.nombre}** (ID: ${empleado.idEmpleado})? Esta acción no se puede deshacer.`,
-            () => {
-                deleteEmpleado(empleado.idEmpleado).then(() => {
-                    if (toastRef.current) {
-                        toastRef.current.show('Empleado eliminado correctamente.', 'danger', 3000);
-                    }
-                    getAllEmpleados();
-                }).catch(error => {
-                    console.error("Error al eliminar empleado:", error);
-                    if (toastRef.current) {
-                        toastRef.current.show("Error al eliminar el empleado.", 'error', 5000);
-                    }
-                })
-            }
-        );
+    confirmRef.current.show(
+      `¿Está seguro de eliminar al empleado **${empleado.nombre}** (ID: ${empleado.idEmpleado})? Esta acción no se puede deshacer.`,
+      () => {
+        deleteEmpleado(empleado.idEmpleado).then(() => {
+          if (toastRef.current) {
+            toastRef.current.show('Empleado eliminado correctamente.', 'danger', 3000);
+          }
+          getAllEmpleados();
+        }).catch(error => {
+          console.error("Error al eliminar empleado:", error);
+          if (toastRef.current) {
+            toastRef.current.show("Error al eliminar el empleado.", 'error', 5000);
+          }
+        })
+      }
+    );
   }
 
   //Navega crear empleado
@@ -317,8 +388,8 @@ export const ListEmpleadoComponent = () => {
   return (
     <div className="container-fluid p-4">
       <ToastNotification ref={toastRef} />
-            {/* 💡 4. Renderizar el ConfirmDialog */}
-            <ConfirmDialog ref={confirmRef} />
+      {/* 💡 4. Renderizar el ConfirmDialog */}
+      <ConfirmDialog ref={confirmRef} />
       {pagTitulo()}
 
 
@@ -445,13 +516,13 @@ export const ListEmpleadoComponent = () => {
                             {botonConfig.texto}
                           </button>
 
-                                                {/* Botón de Eliminar con ConfirmDialog */}
-                                                <button
-                                                    className='btn btn-eliminar sepaizq d-none'
-                                                    onClick={() => eliminarEmpleado(empleado)}
-                                                >
-                                                    Eliminar
-                                                </button>
+                          {/* Botón de Eliminar con ConfirmDialog */}
+                          <button
+                            className='btn btn-eliminar sepaizq d-none'
+                            onClick={() => eliminarEmpleado(empleado)}
+                          >
+                            Eliminar
+                          </button>
                         </>
                       ) : targetFlag === 1 ? (
 
